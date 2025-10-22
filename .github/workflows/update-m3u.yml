@@ -1,0 +1,30 @@
+name: Update M3U Playlist
+
+on:
+  schedule:
+    - cron: '0 */4 * * *'  # Every 6 hours (e.g., 12 AM, 6 AM, 12 PM, 6 PM IST)
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.x'
+    - name: Install dependencies
+      run: pip install requests
+    - name: Update M3U
+      run: python update-m3u.py
+    - name: Commit updated M3U
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add output.m3u
+        git diff --staged --quiet || git commit -m "Update M3U playlist with fresh streams $(date -u)"
+        git push
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
