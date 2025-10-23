@@ -2,8 +2,8 @@ name: Update M3U Playlist
 
 on:
   schedule:
-    - cron: "0 * * * *" # Run every hour at minute 0 UTC (e.g., 6:30 PM IST)
-  workflow_dispatch: # Allow manual trigger
+    - cron: "0 * * * *"   # Run every hour at minute 0 UTC
+  workflow_dispatch:       # Allow manual trigger
 
 jobs:
   update-m3u:
@@ -17,14 +17,27 @@ jobs:
         uses: PowerShell/setup-pwsh@v2
 
       - name: Run PowerShell script
-        run: pwsh -File convert_m3u.ps1
+        id: run_script
+        run: |
+          pwsh -Command "
+          try {
+            ./convert_m3u.ps1 *>&1 | Tee-Object -FilePath logs.txt
+            echo 'Script executed successfully'
+          } catch {
+            Write-Host 'Error occurred running convert_m3u.ps1'
+            exit 1
+          }"
 
-      - name: Commit and push output.m3u
+      - name: Commit and push updated files
         run: |
           git config --global user.name "GitHub Action"
           git config --global user.email "action@github.com"
-          git add output.m3u
-          git commit -m "Update output.m3u with latest stream URLs" || echo "No changes to commit"
+          
+          # Add both output and log files
+          git add output.m3u logs.txt
+          
+          # Only commit if there are actual changes
+          git diff --cached --quiet || git commit -m "Auto-update M3U and logs ($(date -u +'%Y-%m-%d %H:%M:%S UTC'))"
           git push
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

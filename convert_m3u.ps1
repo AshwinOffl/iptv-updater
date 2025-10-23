@@ -1,4 +1,4 @@
-# Define file paths
+# Define file paths (relative to repo root)
 $m3uFile = "input.m3u"
 $outputFile = "output.m3u"
 
@@ -15,9 +15,10 @@ $lastExtinf = ""
 
 foreach ($line in $m3uContent) {
     $line = $line.Trim()
+
     # Store EXTINF line for channel name and attributes
     if ($line -match "^#EXTINF:-?\d*(.+),(.+)$") {
-        $lastExtinf = $line  # Store full EXTINF line to preserve attributes
+        $lastExtinf = $line
         $outputM3u += "$line`n"
         continue
     }
@@ -35,18 +36,17 @@ foreach ($line in $m3uContent) {
         $channelName = if ($lastExtinf -match ",(.+)$") { $matches[1] } else { "Unknown_$id" }
 
         try {
-            # Use curl to handle redirects and capture headers/content
-            $curlCommand = "curl -L -k -v --max-redirs 10 --connect-timeout 15 -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36\" -H \"Accept: */*\" -H \"Referer: http://max4kk-us-rkdyiptv.wasmer.app/\" \"$url\""
-            
+            # Use curl to handle redirects and capture headers/content (Linux)
+            $curlCommand = "curl -L -k -v --max-redirs 10 --connect-timeout 15 -H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/117.0.0.0 Safari/537.36' -H 'Accept: */*' -H 'Referer: http://max4kk-us-rkdyiptv.wasmer.app/' '$url'"
+
             # Capture verbose output and content
             $verboseOutput = & bash -c $curlCommand 2>&1
             $content = $verboseOutput | Where-Object { $_ -notmatch "^[<>]\s" } | Out-String
             $headers = $verboseOutput | Where-Object { $_ -match "^[<>]\s" } | Out-String
 
-            # Log headers for debugging
             Write-Host ("ID {0}: Headers:`n{1}" -f $id, $headers)
 
-            # Find redirect URL (last Location header or final URL)
+            # Find redirect URL
             $redirectUrl = $verboseOutput | Where-Object { $_ -match "^>\s*Location:\s*(.+)$" } | ForEach-Object { $matches[1] } | Select-Object -Last 1
             if (-not $redirectUrl) {
                 $redirectUrl = $verboseOutput | Where-Object { $_ -match "^\*\s*Issue another request to this URL: '(.+)'$" } | ForEach-Object { $matches[1] } | Select-Object -Last 1
@@ -54,15 +54,14 @@ foreach ($line in $m3uContent) {
             if (-not $redirectUrl) {
                 throw "No redirect URL found in response"
             }
+
             Write-Host ("ID {0}: Redirect URL: {1}" -f $id, $redirectUrl)
 
             # Check if redirect URL is an .m3u8
             if ($redirectUrl -match "\.m3u8\?token=.+$") {
-                # Look for relative path like tracks-v1a1/mono.m3u8?token=...
                 $contentLines = $content -split "`n"
                 $relativePath = $contentLines | Where-Object { $_ -match "^[^#].*tracks-v1a1/mono\.m3u8\?token=.+" } | Select-Object -First 1
                 if ($relativePath) {
-                    # Combine redirect base with relative path
                     $redirectBase = $redirectUrl -replace "(index\.m3u8\?token=.+)$", ""
                     $streamUrl = "$redirectBase$relativePath".Trim()
                     $outputM3u += "#EXTINF:-1$($lastExtinf -replace ',.*$', ''),$channelName`n$streamUrl`n"
@@ -73,15 +72,14 @@ foreach ($line in $m3uContent) {
                 }
             } else {
                 Write-Warning ("ID {0}: Redirect URL is not an .m3u8: {1}" -f $id, $redirectUrl)
-                $outputM3u += "#EXTINF:-1$($lastExtinf -replace ',.*$', ''),$channelName`n$url`n"  # Fallback to original
+                $outputM3u += "#EXTINF:-1$($lastExtinf -replace ',.*$', ''),$channelName`n$url`n"
             }
         } catch {
             Write-Error ("Failed to process ID {0} at {1} : {2}" -f $id, $url, $_)
-            Write-Host ("ID {0}: Error Response Content:`n{1}" -f $id, $content)
-            $outputM3u += "#EXTINF:-1$($lastExtinf -replace ',.*$', ''),$channelName`n$url`n"  # Fallback to original
+            $outputM3u += "#EXTINF:-1$($lastExtinf -replace ',.*$', ''),$channelName`n$url`n"
         }
     } else {
-        $outputM3u += "$line`n"  # Keep unmatched URLs
+        $outputM3u += "$line`n"
     }
 }
 
@@ -89,7 +87,7 @@ foreach ($line in $m3uContent) {
 try {
     $utf8Bom = New-Object System.Text.UTF8Encoding($true)
     [IO.File]::WriteAllText($outputFile, $outputM3u, $utf8Bom)
-    Write-Host "New M3U file saved to $outputFile"
+    Write-Host "✅ New M3U file saved to $outputFile"
 } catch {
     Write-Error "Failed to write output file $outputFile : $_"
     exit 1
