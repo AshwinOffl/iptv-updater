@@ -2,35 +2,35 @@ name: Auto Convert M3U Playlist
 
 on:
   schedule:
-    - cron: "0 * * * *"
-  workflow_dispatch:
+    - cron: "0 * * * *"  # Every hour
+  workflow_dispatch:      # Allow manual trigger
 
 jobs:
   convert:
     runs-on: ubuntu-latest
     permissions:
-      contents: write
+      contents: write   # Required for push
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
-      - name: Setup PowerShell
-        uses: actions/setup-powershell@v3
-
-      - name: Run conversion script
+      - name: Run M3U conversion script
         shell: pwsh
         run: pwsh ./convert_m3u.ps1
 
-      - name: Commit and push updated output.m3u
+      - name: Commit and push output.m3u if changed
+        shell: pwsh
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
-
+          
           git add output.m3u
-          if git diff --cached --quiet; then
-            echo "✅ No changes to commit."
-          else
-            git commit -m "Auto update: output.m3u [$(date '+%Y-%m-%d %H:%M:%S')]"
+          
+          if (git diff --cached --quiet) {
+            Write-Host "✅ No changes to commit."
+          } else {
+            git commit -m "Auto update: output.m3u [$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')]"
             git push
-            echo "✅ Changes committed and pushed."
+            Write-Host "✅ Changes committed and pushed."
+          }
