@@ -2,13 +2,16 @@ from flask import Flask, request, redirect, Response
 import requests
 import re
 import urllib3
+import time
+import os
 
-# Suppress InsecureRequestWarning
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 app = Flask(__name__)
 
-# Read input.m3u
+# Get request delay from environment variable (default 1 second)
+REQUEST_DELAY = float(os.getenv('REQUEST_DELAY', '1'))
+
 def load_m3u():
     try:
         with open("input.m3u", "r", encoding="utf-8") as f:
@@ -30,7 +33,6 @@ def load_m3u():
         print(f"Error reading input.m3u: {e}")
         return []
 
-# /stream endpoint: Fetch fresh .m3u8 URL
 @app.route('/stream')
 def get_stream():
     channel_id = request.args.get('id')
@@ -39,8 +41,9 @@ def get_stream():
 
     url = f"http://max4kk-us-rkdyiptv.wasmer.app/play.php?id={channel_id}"
     try:
+        time.sleep(REQUEST_DELAY)
         headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
-        response = requests.get(url, headers=headers, verify=False, allow_redirects=True)
+        response = requests.get(url, headers=headers, verify=False, allow_redirects=True, timeout=10)
         redirect_url = next((h.headers["location"] for h in response.history if ".m3u8?token=" in h.headers.get("location", "")), None)
         if not redirect_url:
             print(f"No redirect for ID {channel_id}")
@@ -51,7 +54,6 @@ def get_stream():
             print(f"No relative path for ID {channel_id}")
             return "Failed to get relative path", 500
         stream_url = f"{redirect_url.split('index.m3u8')[0]}{relative_path}"
-        # Add FFmpeg wrapper headers for TV apps
         response = redirect(stream_url)
         response.headers['X-KODI-Prop'] = 'inputstream=inputstream.ffmpegdirect,ManifestType=HLS'
         return response
@@ -59,7 +61,6 @@ def get_stream():
         print(f"Error for ID {channel_id}: {e}")
         return f"Error: {str(e)}", 500
 
-# /playlist endpoint: Serve M3U with API URLs
 @app.route('/playlist')
 def get_playlist():
     m3u_data = load_m3u()
