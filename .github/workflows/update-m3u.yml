@@ -1,8 +1,8 @@
-name: Update M3U Playlist
+name: Update M3U8 Playlist
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Run every hour
+    - cron: '0 * * * *'  # Run every hour at minute 0 UTC (e.g., 6:30 PM IST)
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
