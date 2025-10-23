@@ -2,26 +2,26 @@ name: Update M3U Playlist
 
 on:
   schedule:
-    - cron: '0 * * * *'  # Run every hour at minute 0 UTC (e.g., 6:30 PM IST)
-  workflow_dispatch:  # Allow manual trigger
+    - cron: "0 * * * *" # Run every hour at minute 0 UTC (e.g., 6:30 PM IST)
+  workflow_dispatch: # Allow manual trigger
 
 jobs:
   update-m3u:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-    - name: Run PowerShell script
-      run: pwsh -File convert_m3u.ps1
+      - name: Run PowerShell script
+        run: pwsh -File convert_m3u.ps1
 
-    - name: Commit and push output.m3u
-      run: |
-        git config --global user.name "GitHub Action"
-        git config --global user.email "action@github.com"
-        git add output.m3u
-        git commit -m "Update output.m3u with latest stream URLs" || echo "No changes to commit"
-        git push
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit and push output.m3u
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          git add output.m3u
+          git commit -m "Update output.m3u with latest stream URLs" || echo "No changes to commit"
+          git push
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
