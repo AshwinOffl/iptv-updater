@@ -13,6 +13,9 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Setup PowerShell
+        uses: PowerShell/setup-pwsh@v2
+
       - name: Run PowerShell script
         run: pwsh -File convert_m3u.ps1
 
