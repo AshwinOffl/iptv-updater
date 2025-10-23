@@ -36,7 +36,7 @@ foreach ($line in $m3uContent) {
 
         try {
             # Use curl to handle redirects and capture headers/content
-            $curlCommand = "curl -L -k -v --max-redirs 10 --connect-timeout 15 -H `"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36`" -H `"Accept: */*`" -H `"Referer: http://max4kk-us-rkdyiptv.wasmer.app/`" `"$url`""
+            $curlCommand = "curl -L -k -v --max-redirs 10 --connect-timeout 15 -H \"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36\" -H \"Accept: */*\" -H \"Referer: http://max4kk-us-rkdyiptv.wasmer.app/\" \"$url\""
             
             # Capture verbose output and content
             $verboseOutput = & bash -c $curlCommand 2>&1
