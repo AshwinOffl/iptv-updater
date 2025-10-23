@@ -1,4 +1,4 @@
-# Define file paths
+# Define file paths (relative to repo root)
 $m3uFile = "input.m3u"
 $outputFile = "output.m3u"
 
@@ -11,6 +11,7 @@ try {
 }
 
 $outputM3u = "#EXTM3U`n"
+$lastExtinf = ""
 $lastChannelName = ""
 $lastGroupTitle = ""
 
@@ -56,7 +57,12 @@ foreach ($line in $m3uContent) {
             $redirectUrl = $verboseOutput | Where-Object { $_ -match "^>\s*Location:\s*(.+)$" } |
                            ForEach-Object { $matches[1] } | Select-Object -Last 1
 
-            if (-not $redirectUrl) { throw "No redirect URL found" }
+            if (-not $redirectUrl) { 
+                $redirectUrl = $verboseOutput | Where-Object { $_ -match "^\*\s*Issue another request to this URL: '(.+)'$" } |
+                               ForEach-Object { $matches[1] } | Select-Object -Last 1
+            }
+
+            if (-not $redirectUrl) { throw "No redirect URL found in response" }
 
             # Check for .m3u8 and relative paths
             if ($redirectUrl -match "\.m3u8\?token=.+$") {
@@ -64,6 +70,7 @@ foreach ($line in $m3uContent) {
                 $relativePath = $contentLines | Where-Object { $_ -match "^[^#].*tracks-v1a1/mono\.m3u8\?token=.+" } | Select-Object -First 1
                 $streamUrl = if ($relativePath) { ($redirectUrl -replace "(index\.m3u8\?token=.+)$", "") + $relativePath.Trim() } else { $redirectUrl }
 
+                # Output clean EXTINF with optional group-title
                 if ($lastGroupTitle) {
                     $outputM3u += "#EXTINF:-1 group-title=""$lastGroupTitle"",$channelName`n$streamUrl`n"
                 } else {
@@ -71,6 +78,7 @@ foreach ($line in $m3uContent) {
                 }
 
             } else {
+                # fallback if redirect is not .m3u8
                 if ($lastGroupTitle) {
                     $outputM3u += "#EXTINF:-1 group-title=""$lastGroupTitle"",$channelName`n$url`n"
                 } else {
