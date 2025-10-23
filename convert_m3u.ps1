@@ -11,21 +11,14 @@ try {
 }
 
 $outputM3u = "#EXTM3U`n"
-$lastChannelName = ""
-$lastGroupTitle = ""
+$lastExtinf = ""
 
 foreach ($line in $m3uContent) {
     $line = $line.Trim()
 
-    # Capture EXTINF line for channel name and group-title
-    if ($line -match "^#EXTINF:-?\d+.*group-title=""([^""]*)""[^,]*,(.+)$") {
-        $lastGroupTitle = $matches[1]
-        $lastChannelName = $matches[2]
-        $outputM3u += "$line`n"
-        continue
-    } elseif ($line -match "^#EXTINF:-?\d*,(.+)$") {
-        $lastChannelName = $matches[1]
-        $lastGroupTitle = ""
+    # Store EXTINF line for channel name
+    if ($line -match "^#EXTINF:-?\d*,(.+)$") {
+        $lastExtinf = $matches[1]
         $outputM3u += "$line`n"
         continue
     }
@@ -40,10 +33,10 @@ foreach ($line in $m3uContent) {
     if ($line -match "^http://max4kk-us-rkdyiptv\.wasmer\.app/play\.php\?id=(\d+)$") {
         $url = $line
         $id = $matches[1]
-        $channelName = if ($lastChannelName) { $lastChannelName } else { "Unknown_$id" }
+        $channelName = if ($lastExtinf) { $lastExtinf } else { "Unknown_$id" }
 
         try {
-            # Use Windows curl.exe
+            # Use curl to handle redirects and capture headers/content
             $curlCommand = "curl.exe -L -k -v --max-redirs 10 --connect-timeout 15 " +
                            "-H `"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36`" " +
                            "-H `"Accept: */*`" " +
@@ -67,32 +60,16 @@ foreach ($line in $m3uContent) {
                 if ($relativePath) {
                     $redirectBase = $redirectUrl -replace "(index\.m3u8\?token=.+)$", ""
                     $streamUrl = "$redirectBase$relativePath".Trim()
-                } else {
-                    $streamUrl = $redirectUrl
-                }
-
-                # Output with group-title if exists
-                if ($lastGroupTitle) {
-                    $outputM3u += "#EXTINF:-1 group-title=""$lastGroupTitle"",$channelName`n$streamUrl`n"
-                } else {
                     $outputM3u += "#EXTINF:-1,$channelName`n$streamUrl`n"
-                }
-
-            } else {
-                # fallback
-                if ($lastGroupTitle) {
-                    $outputM3u += "#EXTINF:-1 group-title=""$lastGroupTitle"",$channelName`n$url`n"
                 } else {
-                    $outputM3u += "#EXTINF:-1,$channelName`n$url`n"
+                    $outputM3u += "#EXTINF:-1,$channelName`n$redirectUrl`n"
                 }
-            }
-        } catch {
-            Write-Warning ("ID {0}: Failed to process URL {1}, using original" -f $id, $url)
-            if ($lastGroupTitle) {
-                $outputM3u += "#EXTINF:-1 group-title=""$lastGroupTitle"",$channelName`n$url`n"
             } else {
                 $outputM3u += "#EXTINF:-1,$channelName`n$url`n"
             }
+        } catch {
+            Write-Warning ("ID {0}: Failed to process URL {1}, using original" -f $id, $url)
+            $outputM3u += "#EXTINF:-1,$channelName`n$url`n"
         }
     } else {
         $outputM3u += "$line`n"
