@@ -1,43 +1,40 @@
-name: Update M3U Playlist
+name: Auto Convert M3U Playlist
 
 on:
   schedule:
-    - cron: "0 * * * *" # Run every hour at minute 0 UTC
-  workflow_dispatch: # Allow manual trigger
+    # Runs every hour
+    - cron: "0 * * * *"
+  workflow_dispatch: # allow manual runs
 
 jobs:
-  update-m3u:
+  convert:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write # required to push commits
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup PowerShell
-        uses: PowerShell/setup-pwsh@v2 # ✅ lowercase 'p'
+      - name: Install PowerShell
+        uses: PowerShell/PowerShell@v1
 
-      - name: Run PowerShell script
-        id: run_script
+      - name: Run conversion script
+        shell: pwsh
         run: |
-          pwsh -Command "
-          try {
-            ./convert_m3u.ps1 *>&1 | Tee-Object -FilePath logs.txt
-            echo 'Script executed successfully'
-          } catch {
-            Write-Host 'Error occurred running convert_m3u.ps1'
-            exit 1
-          }"
+          pwsh ./convert_m3u.ps1
 
-      - name: Commit and push updated files
+      - name: Commit and push updated output.m3u
         run: |
-          git config --global user.name "GitHub Action"
-          git config --global user.email "action@github.com"
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Add both output and log files
-          git add output.m3u logs.txt
-
-          # Only commit if there are actual changes
-          git diff --cached --quiet || git commit -m "Auto-update M3U and logs ($(date -u +'%Y-%m-%d %H:%M:%S UTC'))"
-          git push
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Add and commit only if changes exist
+          git add output.m3u
+          if git diff --cached --quiet; then
+            echo "✅ No changes to commit."
+          else
+            git commit -m "Auto update: output.m3u [$(date '+%Y-%m-%d %H:%M:%S')]"
+            git push
+            echo "✅ Changes committed and pushed."
+          fi
