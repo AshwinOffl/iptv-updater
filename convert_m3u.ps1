@@ -12,21 +12,13 @@ try {
 
 $outputM3u = "#EXTM3U`n"
 $lastExtinf = ""
-$lastChannelName = ""
-$lastGroupTitle = ""
 
 foreach ($line in $m3uContent) {
     $line = $line.Trim()
 
-    # Capture EXTINF line for channel name and group-title
-    if ($line -match "^#EXTINF:-?\d+.*group-title=""([^""]*)""[^,]*,(.+)$") {
-        $lastGroupTitle = $matches[1]
-        $lastChannelName = $matches[2]
-        $outputM3u += "$line`n"
-        continue
-    } elseif ($line -match "^#EXTINF:-?\d*,(.+)$") {
-        $lastChannelName = $matches[1]
-        $lastGroupTitle = ""
+    # Store EXTINF line for channel name and attributes
+    if ($line -match "^#EXTINF:-?\d*(.+),(.+)$") {
+        $lastExtinf = $line
         $outputM3u += "$line`n"
         continue
     }
@@ -41,58 +33,59 @@ foreach ($line in $m3uContent) {
     if ($line -match "^http://max4kk-us-rkdyiptv\.wasmer\.app/play\.php\?id=(\d+)$") {
         $url = $line
         $id = $matches[1]
-        $channelName = if ($lastChannelName) { $lastChannelName } else { "Unknown_$id" }
+        $channelName = if ($lastExtinf -match ",(.+)$") { $matches[1] } else { "Unknown_$id" }
 
         try {
-            # Use curl to handle redirects and capture headers/content
-            $curlCommand = "curl.exe -L -k -v --max-redirs 10 --connect-timeout 15 " +
-                           "-H `"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/117.0.0.0 Safari/537.36`" " +
-                           "-H `"Accept: */*`" " +
-                           "-H `"Referer: http://max4kk-us-rkdyiptv.wasmer.app/`" `"$url`""
+            # Use curl to handle redirects and capture headers/content (Linux)
+            $curlCommand = "curl -L -k -v --max-redirs 10 --connect-timeout 15 " +
+                           "-H 'User-Agent: Mozilla/5.0 (X11; Linux x86_64) Chrome/117.0.0.0 Safari/537.36' " +
+                           "-H 'Accept: */*' " +
+                           "-H 'Referer: http://max4kk-us-rkdyiptv.wasmer.app/' '$url'"
 
-            $verboseOutput = & cmd /c $curlCommand 2>&1
+            # Capture verbose output and content
+            $verboseOutput = & bash -c $curlCommand 2>&1
             $content = $verboseOutput | Where-Object { $_ -notmatch "^[<>]\s" } | Out-String
+            $headers = $verboseOutput | Where-Object { $_ -match "^[<>]\s" } | Out-String
 
-            # Extract last Location header
+            Write-Host ("ID {0}: Headers:`n{1}" -f $id, $headers)
+
+            # Find redirect URL
             $redirectUrl = $verboseOutput | Where-Object { $_ -match "^>\s*Location:\s*(.+)$" } |
                            ForEach-Object { $matches[1] } | Select-Object -Last 1
 
-            if (-not $redirectUrl) { 
+            if (-not $redirectUrl) {
                 $redirectUrl = $verboseOutput | Where-Object { $_ -match "^\*\s*Issue another request to this URL: '(.+)'$" } |
                                ForEach-Object { $matches[1] } | Select-Object -Last 1
             }
 
             if (-not $redirectUrl) { throw "No redirect URL found in response" }
 
-            # Check for .m3u8 and relative paths
+            Write-Host ("ID {0}: Redirect URL: {1}" -f $id, $redirectUrl)
+
+            # Check if redirect URL is an .m3u8
             if ($redirectUrl -match "\.m3u8\?token=.+$") {
                 $contentLines = $content -split "`n"
-                $relativePath = $contentLines | Where-Object { $_ -match "^[^#].*tracks-v1a1/mono\.m3u8\?token=.+" } | Select-Object -First 1
-                $streamUrl = if ($relativePath) { ($redirectUrl -replace "(index\.m3u8\?token=.+)$", "") + $relativePath.Trim() } else { $redirectUrl }
+                $relativePath = $contentLines | Where-Object { $_ -match "^[^#].*tracks-v1a1/mono\.m3u8\?token=.+" } |
+                                Select-Object -First 1
 
-                # Output clean EXTINF with optional group-title
-                if ($lastGroupTitle) {
-                    $outputM3u += "#EXTINF:-1 group-title=""$lastGroupTitle"",$channelName`n$streamUrl`n"
+                if ($relativePath) {
+                    $redirectBase = $redirectUrl -replace "(index\.m3u8\?token=.+)$", ""
+                    $streamUrl = "$redirectBase$relativePath".Trim()
+                    $outputM3u += "#EXTINF:-1$($lastExtinf -replace ',.*$', ''),$channelName`n$streamUrl`n"
+                    Write-Host ("ID {0}: Stream URL: {1}" -f $id, $streamUrl)
                 } else {
-                    $outputM3u += "#EXTINF:-1,$channelName`n$streamUrl`n"
+                    Write-Warning ("ID {0}: No tracks-v1a1/mono.m3u8 path found, using redirect URL" -f $id)
+                    $outputM3u += "#EXTINF:-1$($lastExtinf -replace ',.*$', ''),$channelName`n$redirectUrl`n"
                 }
 
             } else {
-                # fallback if redirect is not .m3u8
-                if ($lastGroupTitle) {
-                    $outputM3u += "#EXTINF:-1 group-title=""$lastGroupTitle"",$channelName`n$url`n"
-                } else {
-                    $outputM3u += "#EXTINF:-1,$channelName`n$url`n"
-                }
+                Write-Warning ("ID {0}: Redirect URL is not an .m3u8: {1}" -f $id, $redirectUrl)
+                $outputM3u += "#EXTINF:-1$($lastExtinf -replace ',.*$', ''),$channelName`n$url`n"
             }
 
         } catch {
-            Write-Warning ("ID {0}: Failed to process URL {1}, using original" -f $id, $url)
-            if ($lastGroupTitle) {
-                $outputM3u += "#EXTINF:-1 group-title=""$lastGroupTitle"",$channelName`n$url`n"
-            } else {
-                $outputM3u += "#EXTINF:-1,$channelName`n$url`n"
-            }
+            Write-Error ("Failed to process ID {0} at {1} : {2}" -f $id, $url, $_)
+            $outputM3u += "#EXTINF:-1$($lastExtinf -replace ',.*$', ''),$channelName`n$url`n"
         }
 
     } else {
